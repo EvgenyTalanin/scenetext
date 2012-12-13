@@ -194,14 +194,13 @@ public:
         perimeter = 4;
     }
 
-    // _dbl is "double border length"
-    void Attach(Region _extra, int _dbl)
+    void Attach(Region _extra, int _borderLength)
     {
         if (start != _extra.start)
         {
             bounds |= _extra.bounds;
             area += _extra.area;
-            perimeter += _extra.perimeter - _dbl;
+            perimeter += _extra.perimeter - 2 * _borderLength;
         }
     }
 
@@ -306,8 +305,6 @@ void MatasLike(Mat& originalImage, bool showImage = false)
         {
             Point p0 = pointLevels[thresh][k];
 
-            //printf("=== NEXT POI: %d %d\n", p0.x, p0.y);
-
             // Surely point when accessed for the first time is not in any region
             // Setting parent, rank, creating region (uf_makeset)
             parents[pointLevels[thresh][k]] = pointLevels[thresh][k];
@@ -320,6 +317,35 @@ void MatasLike(Mat& originalImage, bool showImage = false)
             Point proot = pointLevels[thresh][k];
 
             bool changed = false;
+
+            // <13.12>
+            // TODO: here we use some of definitions from the same further loop, consider rewriting
+            map<Point, int, PointComp> neigborsInRegions;
+            for(di = 0; di < neigborsCount; di++)
+            {
+                int x_new = pointLevels[thresh][k].x + dx[di];
+                int y_new = pointLevels[thresh][k].y + dy[di];
+
+                // TODO: implement corresponding function?
+                if ((x_new < 0) || (y_new < 0) || (x_new >= originalImage.cols) || (y_new >= originalImage.rows))
+                {
+                    continue;
+                }
+
+                Point p1(x_new, y_new);
+
+                map<Point, Point, PointComp>::iterator p1pi = parents.find(p1);
+                if (p1pi != parents.end())
+                {
+                    Point p1root = uf_Find(p1, &parents);
+                    pair<map<Point, int, PointComp>::iterator, bool> ret = neigborsInRegions.insert(pair<Point, int>(p1root, 1));
+                    if (!ret.second)
+                    {
+                        neigborsInRegions[p1root]++;
+                    }
+                }
+            }
+            // </13.12>
 
             for(di = 0; di < neigborsCount; di++)
             {
@@ -344,51 +370,16 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                 map<Point, Point, PointComp>::iterator p1pi = parents.find(p1);
                 if (p1pi != parents.end())
                 {
-                    // Entering here means that p1 has some parent
+                    // Entering here means that p1 belongs to some region since has a parent
                     // Will now find root
                     Point p1root = uf_Find(p1, &parents);
 
                     map<Point, Region, PointComp>::iterator neighbor_region = regions.find(p1root);
+                    // TODO: isn't this redundant check? p1 is already in region
                     if (neighbor_region != regions.end())
                     {
                         // TODO: not always
                         changed = true;
-
-                        // <12.12>
-                        int doubleBorderLen = 0;
-                        /*
-                        Rect b = regions[proot].Bounds();
-                        Rect b1 = regions[p1root].Bounds();
-                        b.x--; b.y--; b.width += 2; b.height += 2;
-                        b1.x--; b1.y--; b1.width += 2; b1.height += 2;
-                        Rect roi = b1 & b;
-                        if (regions[proot].Area() == 1)
-                        {
-                            roi = regions[proot].Bounds();
-                        }
-                        if (regions[p1root].Area() == 1)
-                        {
-                            roi = regions[p1root].Bounds();
-                        }
-
-                        for(int px = roi.x; px < roi.x + roi.width; px++)
-                        {
-                            for(int py = roi.y; py < roi.y + roi.height; py++)
-                            {
-                                Point pxyroot = uf_Find(Point(px, py), &parents);
-                                for(int ddi = 0; ddi < neigborsCount; ddi++)
-                                {
-                                    Point pxydroot = uf_Find(Point(px + dx[ddi], py + dy[ddi]), &parents);
-                                    if ( ((pxydroot == proot) && (pxyroot == p1root)) ||
-                                         ((pxydroot == p1root) && (pxyroot == proot)) )
-                                    {
-                                        doubleBorderLen++;
-                                    }
-                                }
-                            }
-                        }
-                        */
-                        // </12.12>
 
                         // Need to union. Three cases: rank1>rank2, rank1<rank2, rank1=rank2
                         int point_rank = ranks[pointLevels[thresh][k]];
@@ -398,7 +389,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         if (point_rank < neighbor_rank)
                         {
                             parents[proot] = p1root;
-                            regions[p1root].Attach(regions[proot], doubleBorderLen);
+                            regions[p1root].Attach(regions[proot], neigborsInRegions[p1root]);
                             if (proot != p1root)
                             {
                                 // TODO: check if smth is really erased
@@ -408,7 +399,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         else if (point_rank > neighbor_rank)
                         {
                             parents[p1root] = proot;
-                            regions[proot].Attach(regions[p1root], doubleBorderLen);
+                            regions[proot].Attach(regions[p1root], neigborsInRegions[p1root]);
                             if (proot != p1root)
                             {
                                 // TODO: check if smth is really erased
@@ -419,7 +410,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         {
                             parents[p1root] = proot;
                             ranks[proot] = ranks[proot] + 1;
-                            regions[proot].Attach(regions[p1root], doubleBorderLen);
+                            regions[proot].Attach(regions[p1root], neigborsInRegions[p1root]);
                             if (proot != p1root)
                             {
                                 // TODO: check if smth is really erased
@@ -431,6 +422,10 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                     {
                         // Neighbor point not in region. Do nothing
                     }
+                }
+                else
+                {
+                    // Neighbor not in region. Doing nothing
                 }
             }
         }
@@ -488,14 +483,14 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 int main()
 {
     string filename;
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/ontario_small.jpg";
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/vilnius.jpg";
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/lines.jpg";
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/painting.jpg";
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/road.jpg";
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/floor.jpg";
-    //filename = "/home/evgeny/argus/opencv_sandbox/test_images/campaign.jpg";
-    filename = "/home/evgeny/argus/opencv_sandbox/test_images/incorrect640.jpg";
+    //filename = "./testimages/ontario_small.jpg";
+    //filename = "./testimages/vilnius.jpg";
+    //filename = "./testimages/lines.jpg";
+    //filename = "./testimages/painting.jpg";
+    //filename = "./testimages/road.jpg";
+    //filename = "./testimages/floor.jpg";
+    //filename = "./testimages/campaign.jpg";
+    filename = "./testimages/incorrect640.jpg";
     Mat originalImage = imread(filename);
     Mat originalImage2 = imread(filename);
 
