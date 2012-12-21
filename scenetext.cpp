@@ -187,14 +187,11 @@ public:
         euler = 0;
         imageh = h;
         crossings = new int[imageh];
-        for(int i = 0; i < imageh; i++)
-        {
-            crossings[i] = 0;
-        }
+        memset(crossings, 0, 4*imageh);
         crossings[_p.y] = 2;
     }
 
-    void Attach(Region* _extra, int _borderLength, int* _crossings = NULL)
+    void Attach(Region* _extra, int _borderLength, int _p0y, int _hn)
     {
         if (start != _extra->start)
         {
@@ -202,11 +199,11 @@ public:
             area += _extra->area;
             perimeter += _extra->perimeter - 2 * _borderLength;
             euler += _extra->euler;
-            for(int i = 0; i < imageh; i++)
+            for(int i = bounds.y - 1; i < bounds.y + bounds.height + 2; i++)
             {
                 crossings[i] += _extra->crossings[i];
-                crossings[i] += _crossings[i];
             }
+            crossings[_p0y] -= 2 * _hn;
         }
     }
 
@@ -329,12 +326,28 @@ void MatasLike(Mat& originalImage, bool showImage = false)
     static int thresh_start = 0;
     static int thresh_end = 101;
     static int thresh_step = 1;
+    int thresh;
 
-    for(int thresh = thresh_start; thresh < thresh_end; thresh += thresh_step)
+    bool changed = false;
+    bool is_good_neighbor[3][3];
+    bool is_any_neighbor[3][3];
+    is_any_neighbor[1][1] = false;
+    int neighborsInRegions = 0, horizontalNeighbors = 0;
+    int q1 = 0, q2 = 0, q3 = 0;
+    int q10 = 0, q20 = 0, q30 = 0;
+    int qtemp = 0;
+    Point p0, p1, proot, p1root;
+    Region* point_region = NULL;
+    int point_rank, neighbor_rank;
+    int x_new, y_new;
+    int ddx, ddy;
+    int npx, npy;
+
+    for(thresh = thresh_start; thresh < thresh_end; thresh += thresh_step)
     {
         for(k = 0; k < pointLevels[thresh].size(); k++)
         {
-            Point p0 = pointLevels[thresh][k];
+            p0 = pointLevels[thresh][k];
 
             // Surely point when accessed for the first time is not in any region
             // Setting parent, rank, creating region (uf_makeset)
@@ -343,19 +356,18 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
             regionsArray[p0.x][p0.y] = new Region(p0, originalImage.rows);
             // Surely find will be successful since region we are searching for was just created
-            Region* point_region = regionsArray[p0.x][p0.y];
-            Point proot = p0;
+            point_region = regionsArray[p0.x][p0.y];
+            proot = p0;
 
-            bool changed = false;
-
-            bool is_any_neighbor[3][3];
-            int q1 = 0, q2 = 0, q3 = 0;
-            int q10 = 0, q20 = 0, q30 = 0;
-            int qtemp = 0;
+            changed = false;
             is_any_neighbor[1][1] = false;
-            for(int ddx = -1; ddx <= 1; ddx++)
+            q1 = 0; q2 = 0; q3 = 0;
+            q10 = 0; q20 = 0; q30 = 0;
+            qtemp = 0;
+
+            for(ddx = -1; ddx <= 1; ddx++)
             {
-                for(int ddy = -1; ddy <= 1; ddy++)
+                for(ddy = -1; ddy <= 1; ddy++)
                 {
                     if ((ddx != 0) || (ddy != 0))
                     {
@@ -364,17 +376,35 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
                     if ((ddx >= 0) && (ddy >= 0))
                     {
-                        is_any_neighbor[1][1] = false;
                         qtemp = is_any_neighbor[ddx+1][ddy+1] + is_any_neighbor[ddx+1][ddy] + is_any_neighbor[ddx][ddy+1] + is_any_neighbor[ddx][ddy];
-                        if (qtemp == 1) q10++; else
-                        if (qtemp == 3) q20++; else
-                        if ((qtemp == 2) && (is_any_neighbor[ddx+1][ddy+1] == is_any_neighbor[ddx][ddy])) q30++;
 
-                        is_any_neighbor[1][1] = true;
-                        qtemp = is_any_neighbor[ddx+1][ddy+1] + is_any_neighbor[ddx+1][ddy] + is_any_neighbor[ddx][ddy+1] + is_any_neighbor[ddx][ddy];
-                        if (qtemp == 1) q1++; else
-                        if (qtemp == 3) q2++; else
-                        if ((qtemp == 2) && (is_any_neighbor[ddx+1][ddy+1] == is_any_neighbor[ddx][ddy])) q3++;
+                        if (qtemp == 0)
+                        {
+                            q1++;
+                        }
+                        else if (qtemp == 1)
+                        {
+                            q10++;
+
+                            npx = ddx == 0 ? 0 : 2;
+                            npy = ddy == 0 ? 0 : 2;
+                            if (is_any_neighbor[npx][npy])
+                            {
+                                q3++;
+                            }
+                        }
+                        else if (qtemp == 2)
+                        {
+                            if (is_any_neighbor[ddx+1][ddy+1] == is_any_neighbor[ddx][ddy])
+                            {
+                                q30++;
+                            }
+                            q2++;
+                        }
+                        else if (qtemp == 3)
+                        {
+                            q20++;
+                        }
                     }
                 }
             }
@@ -390,8 +420,8 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
             for(di = 0; di < neighborsCount; di++)
             {
-                int x_new = p0.x + dx[di];
-                int y_new = p0.y + dy[di];
+                x_new = p0.x + dx[di];
+                y_new = p0.y + dy[di];
 
                 // TODO: implement corresponding function?
                 if ((x_new < 0) || (y_new < 0) || (x_new >= originalImage.cols) || (y_new >= originalImage.rows))
@@ -407,95 +437,79 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                 }
 
                 // p1 is neighbor of point of interest
-                Point p1(x_new, y_new);
+                p1.x = x_new;
+                p1.y = y_new;
 
                 if (parentsArray[p1.x][p1.y] != Point(-1, -1))
                 {
                     // Entering here means that p1 belongs to some region since has a parent
                     // Will now find root
-                    Point p1root = uf_Find(p1, parentsArray);
+                    p1root = uf_Find(p1, parentsArray);
 
-                    Region* neighbor_region = regionsArray[p1root.x][p1root.y];
-                    // TODO: isn't this redundant check? p1 is already in region
-                    if (neighbor_region != NULL)
+                    // Need to union. Three cases: rank1>rank2, rank1<rank2, rank1=rank2
+                    point_rank = ranksArray[p0.x][p0.y];
+                    neighbor_rank = ranksArray[p1root.x][p1root.y];
+
+                    is_good_neighbor[3][3];
+                    neighborsInRegions = 0;
+                    horizontalNeighbors = 0;
+
+                    for(ddx = -1; ddx <= 1; ddx++)
                     {
-                        // Need to union. Three cases: rank1>rank2, rank1<rank2, rank1=rank2
-                        int point_rank = ranksArray[p0.x][p0.y];
-                        int neighbor_rank = ranksArray[p1root.x][p1root.y];
-
-                        bool is_good_neighbor[3][3];
-                        int neighborsInRegions = 0;
-                        int horizontalNeighbors = 0;
-
-                        for(int ddx = -1; ddx <= 1; ddx++)
+                        for(ddy = -1; ddy <= 1; ddy++)
                         {
-                            for(int ddy = -1; ddy <= 1; ddy++)
+                            if ((ddx != 0) || (ddy != 0))
                             {
-                                if ((ddx != 0) || (ddy != 0))
+                                is_good_neighbor[ddx+1][ddy+1] = uf_Find(Point(p0.x + ddx, p0.y + ddy), parentsArray) == p1root;
+
+                                if (is_good_neighbor[ddx+1][ddy+1])
                                 {
-                                    is_good_neighbor[ddx+1][ddy+1] = uf_Find(Point(p0.x + ddx, p0.y + ddy), parentsArray) == p1root;
-
-                                    if (is_good_neighbor[ddx+1][ddy+1])
+                                    if (ddy == 0)
                                     {
-                                        if (ddy == 0)
-                                        {
-                                            horizontalNeighbors++;
-                                        }
+                                        horizontalNeighbors++;
+                                    }
 
-                                        if ((ddy == 0) || (ddx == 0))
-                                        {
-                                            neighborsInRegions++;
-                                        }
+                                    if ((ddy == 0) || (ddx == 0))
+                                    {
+                                        neighborsInRegions++;
                                     }
                                 }
                             }
                         }
+                    }
 
-                        int cr[bwImage.rows];
-                        for (int cri = 0; cri < originalImage.rows; cri++)
+                    // uf_union
+                    if (point_rank < neighbor_rank)
+                    {
+                        parentsArray[proot.x][proot.y] = p1root;
+                        regionsArray[p1root.x][p1root.y]->Attach(regionsArray[proot.x][proot.y], neighborsInRegions, p0.y, horizontalNeighbors);
+                        if (proot != p1root)
                         {
-                            cr[cri] = 0;
+                            // TODO: check if smth is really erased
+                            regionsArray[proot.x][proot.y] = NULL;
+                            changed = true;
                         }
-                        int* crp = &cr[0];
-                        crp[p0.y] = -2 * horizontalNeighbors;
-
-                        // uf_union
-                        if (point_rank < neighbor_rank)
+                    }
+                    else if (point_rank > neighbor_rank)
+                    {
+                        parentsArray[p1root.x][p1root.y] = proot;
+                        regionsArray[proot.x][proot.y]->Attach(regionsArray[p1root.x][p1root.y], neighborsInRegions, p0.y, horizontalNeighbors);
+                        if (proot != p1root)
                         {
-                            parentsArray[proot.x][proot.y] = p1root;
-                            regionsArray[p1root.x][p1root.y]->Attach(regionsArray[proot.x][proot.y], neighborsInRegions, crp);
-                            if (proot != p1root)
-                            {
-                                // TODO: check if smth is really erased
-                                regionsArray[proot.x][proot.y] = NULL;
-                                changed = true;
-                            }
-                        }
-                        else if (point_rank > neighbor_rank)
-                        {
-                            parentsArray[p1root.x][p1root.y] = proot;
-                            regionsArray[proot.x][proot.y]->Attach(regionsArray[p1root.x][p1root.y], neighborsInRegions, crp);
-                            if (proot != p1root)
-                            {
-                                // TODO: check if smth is really erased
-                                regionsArray[p1root.x][p1root.y] = NULL;
-                            }
-                        }
-                        else
-                        {
-                            parentsArray[p1root.x][p1root.y] = proot;
-                            ranksArray[proot.x][proot.y]++;
-                            regionsArray[proot.x][proot.y]->Attach(regionsArray[p1root.x][p1root.y], neighborsInRegions, crp);
-                            if (proot != p1root)
-                            {
-                                // TODO: check if smth is really erased
-                                regionsArray[p1root.x][p1root.y] = NULL;
-                            }
+                            // TODO: check if smth is really erased
+                            regionsArray[p1root.x][p1root.y] = NULL;
                         }
                     }
                     else
                     {
-                        // Neighbor point not in region. Do nothing
+                        parentsArray[p1root.x][p1root.y] = proot;
+                        ranksArray[proot.x][proot.y]++;
+                        regionsArray[proot.x][proot.y]->Attach(regionsArray[p1root.x][p1root.y], neighborsInRegions, p0.y, horizontalNeighbors);
+                        if (proot != p1root)
+                        {
+                            // TODO: check if smth is really erased
+                            regionsArray[p1root.x][p1root.y] = NULL;
+                        }
                     }
                 }
                 else
@@ -539,9 +553,9 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                 printf("Perimeter: %d\n", regionsArray[i][j]->Perimeter());
                 printf("Euler number: %d\n", regionsArray[i][j]->Euler());
                 printf("Crossings: ");
-                for(int jj = regionsArray[i][j]->Bounds().y; jj < regionsArray[i][j]->Bounds().y + regionsArray[i][j]->Bounds().height; jj++)
+                for(int k = regionsArray[i][j]->Bounds().y; k < regionsArray[i][j]->Bounds().y + regionsArray[i][j]->Bounds().height; k++)
                 {
-                    printf("%d ", regionsArray[i][j]->Crossings()[jj]);
+                    printf("%d ", regionsArray[i][j]->Crossings()[k]);
                 }
                 printf("\n");
                 printf("=====\n\n");
@@ -584,7 +598,7 @@ int main()
     Mat originalImage = imread(filename);
     Mat originalImage2 = imread(filename);
 
-    //GroundTruth(originalImage);
+    GroundTruth(originalImage);
     MatasLike(originalImage2);
 
     return 0;
