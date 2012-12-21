@@ -202,13 +202,10 @@ public:
             area += _extra->area;
             perimeter += _extra->perimeter - 2 * _borderLength;
             euler += _extra->euler;
-            if (_crossings)
+            for(int i = 0; i < imageh; i++)
             {
-                for(int i = 0; i < imageh; i++)
-                {
-                    crossings[i] += _extra->crossings[i];
-                    crossings[i] += _crossings[i];
-                }
+                crossings[i] += _extra->crossings[i];
+                crossings[i] += _crossings[i];
             }
         }
     }
@@ -316,8 +313,6 @@ void MatasLike(Mat& originalImage, bool showImage = false)
         }
     }
 
-
-
     // Filling pointLevels
     for(i = 0; i < bwImage.cols; i++)
     {
@@ -346,8 +341,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
             parentsArray[p0.x][p0.y] = p0;
             ranksArray[p0.x][p0.y] = 0;
 
-            Region _r(pointLevels[thresh][k], originalImage.rows);
-            regionsArray[p0.x][p0.y] = &_r;
+            regionsArray[p0.x][p0.y] = new Region(p0, originalImage.rows);
             // Surely find will be successful since region we are searching for was just created
             Region* point_region = regionsArray[p0.x][p0.y];
             Point proot = p0;
@@ -396,8 +390,8 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
             for(di = 0; di < neighborsCount; di++)
             {
-                int x_new = pointLevels[thresh][k].x + dx[di];
-                int y_new = pointLevels[thresh][k].y + dy[di];
+                int x_new = p0.x + dx[di];
+                int y_new = p0.y + dy[di];
 
                 // TODO: implement corresponding function?
                 if ((x_new < 0) || (y_new < 0) || (x_new >= originalImage.cols) || (y_new >= originalImage.rows))
@@ -407,7 +401,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
                 if (changed)
                 {
-                    proot = uf_Find(pointLevels[thresh][k], parentsArray);
+                    proot = uf_Find(p0, parentsArray);
                     point_region = regionsArray[proot.x][proot.y];
                     // point_region should exist!
                 }
@@ -429,9 +423,6 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         int point_rank = ranksArray[p0.x][p0.y];
                         int neighbor_rank = ranksArray[p1root.x][p1root.y];
 
-                        Point root_to_find;
-                        root_to_find = p1root;
-
                         bool is_good_neighbor[3][3];
                         int neighborsInRegions = 0;
                         int horizontalNeighbors = 0;
@@ -442,7 +433,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                             {
                                 if ((ddx != 0) || (ddy != 0))
                                 {
-                                    is_good_neighbor[ddx+1][ddy+1] = uf_Find(Point(p0.x + ddx, p0.y + ddy), parentsArray) == root_to_find;
+                                    is_good_neighbor[ddx+1][ddy+1] = uf_Find(Point(p0.x + ddx, p0.y + ddy), parentsArray) == p1root;
 
                                     if (is_good_neighbor[ddx+1][ddy+1])
                                     {
@@ -593,7 +584,7 @@ int main()
     Mat originalImage = imread(filename);
     Mat originalImage2 = imread(filename);
 
-    GroundTruth(originalImage);
+    //GroundTruth(originalImage);
     MatasLike(originalImage2);
 
     return 0;
