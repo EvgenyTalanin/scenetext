@@ -269,7 +269,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
     Mat bwImage(originalImage.size(), CV_8UC1);
 
-    map<int, vector<Point> > pointLevels;
+    vector<Point> pointLevels[256];
     Point pc;
 
     static int neighborsCount = 4;
@@ -311,17 +311,16 @@ void MatasLike(Mat& originalImage, bool showImage = false)
     }
 
     // Filling pointLevels
-    for(i = 0; i < bwImage.cols; i++)
+    for(i = 0; i < bwImage.rows; i++)
     {
-        for(j = 0; j < bwImage.rows; j++)
+        const uchar* bwImageRow = bwImage.ptr<uchar>(i);
+        for(j = 0; j < bwImage.cols; j++)
         {
-            pc.x = i;
-            pc.y = j;
-            pointLevels[bwImage.at<uint8_t>(pc)].push_back(pc);
+            pc.x = j;
+            pc.y = i;
+            pointLevels[bwImageRow[j]].push_back(pc);
         }
     }
-
-    printf("pointLevels size: %d.\n", (int)pointLevels.size());
 
     static int thresh_start = 0;
     static int thresh_end = 101;
