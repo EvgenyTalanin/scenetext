@@ -65,7 +65,7 @@ int GroundTruth(Mat& _originalImage, bool showImage = false)
             size_t pixelsFilled = floodFill(bwImage, seedPoint, middleScalar, &rectFilled);
             printf("New region: %d\n", regionsCount);
             // We use -1 here since image was expanded by 1 pixel
-            printf("Start point: (%d; %d)\n", seedPoint.x - 1, seedPoint.y - 1);
+            //printf("Start point: (%d; %d)\n", seedPoint.x - 1, seedPoint.y - 1);
             printf("Area: %d\n", (int)pixelsFilled);
             printf("Bounding box (%d; %d) + (%d; %d)\n", rectFilled.x - 1, rectFilled.y - 1, rectFilled.width, rectFilled.height);
 
@@ -186,9 +186,14 @@ public:
         perimeter = 4;
         euler = 0;
         imageh = h;
-        crossings = new int[imageh];
-        memset(crossings, 0, 4*imageh);
+        crossings = new int[imageh + 1];
+        memset(crossings, 0, imageh * 4);
         crossings[_p.y] = 2;
+    }
+
+    ~Region()
+    {
+        delete[] crossings;
     }
 
     void Attach(Region* _extra, int _borderLength, int _p0y, int _hn)
@@ -255,17 +260,20 @@ Point uf_Find(Point _x, Point** _parents)
         return Point(-1, -1);
     }
 
-    if (_parents[_x.x][_x.y] != _x)
+    while(_parents[_x.x][_x.y] != _x)
     {
-        return uf_Find(_parents[_x.x][_x.y], _parents);
+        _x = _parents[_x.x][_x.y];
     }
 
     return _x;
 }
 
-void MatasLike(Mat& originalImage, bool showImage = false)
+void MatasLike(Mat& _originalImage, bool showImage = false)
 {
     double t = (double)getTickCount();
+
+    Mat originalImage(_originalImage.rows + 2, _originalImage.cols + 2, _originalImage.type());
+    copyMakeBorder(_originalImage, originalImage, 1, 1, 1, 1, BORDER_CONSTANT, Scalar(255, 255, 255));
 
     Mat bwImage(originalImage.size(), CV_8UC1);
 
@@ -485,6 +493,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         if (proot != p1root)
                         {
                             // TODO: check if smth is really erased
+                            delete regionsArray[proot.x][proot.y];
                             regionsArray[proot.x][proot.y] = NULL;
                             changed = true;
                         }
@@ -496,6 +505,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         if (proot != p1root)
                         {
                             // TODO: check if smth is really erased
+                            delete regionsArray[p1root.x][p1root.y];
                             regionsArray[p1root.x][p1root.y] = NULL;
                         }
                     }
@@ -507,6 +517,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
                         if (proot != p1root)
                         {
                             // TODO: check if smth is really erased
+                            delete regionsArray[p1root.x][p1root.y];
                             regionsArray[p1root.x][p1root.y] = NULL;
                         }
                     }
@@ -548,7 +559,7 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
                 printf("New region: %d\n", regionsCount);
                 printf("Area: %d\n", regionsArray[i][j]->Area());
-                printf("Bounding box (%d; %d) + (%d; %d)\n", regionsArray[i][j]->Bounds().x, regionsArray[i][j]->Bounds().y, regionsArray[i][j]->Bounds().width, regionsArray[i][j]->Bounds().height);
+                printf("Bounding box (%d; %d) + (%d; %d)\n", regionsArray[i][j]->Bounds().x - 1, regionsArray[i][j]->Bounds().y - 1, regionsArray[i][j]->Bounds().width, regionsArray[i][j]->Bounds().height);
                 printf("Perimeter: %d\n", regionsArray[i][j]->Perimeter());
                 printf("Euler number: %d\n", regionsArray[i][j]->Euler());
                 printf("Crossings: ");
@@ -580,20 +591,29 @@ void MatasLike(Mat& originalImage, bool showImage = false)
 
 
 
-int main()
+int main(int argc, char** argv)
 {
     string filename;
-    //filename = "../testimages/ontario_small.jpg";
-    //filename = "../testimages/vilnius.jpg";
-    //filename = "../testimages/lines.jpg";
-    //filename = "../testimages/painting.jpg";
-    //filename = "../testimages/road.jpg";
-    //filename = "../testimages/floor.jpg";
-    //filename = "../testimages/campaign.jpg";
-    filename = "../testimages/incorrect640.jpg";
-    //filename = "../testimages/points4.jpg";
-    //filename = "../testimages/lettera.jpg";
-    //filename = "../testimages/abv.jpg";
+
+    if (argc == 1)
+    {
+        //filename = "../testimages/ontario_small.jpg";
+        filename = "../testimages/vilnius.jpg";
+        //filename = "../testimages/lines.jpg";
+        //filename = "../testimages/painting.jpg";
+        //filename = "../testimages/road.jpg";
+        //filename = "../testimages/floor.jpg";
+        //filename = "../testimages/campaign.jpg";
+        //filename = "../testimages/incorrect640.jpg";
+        //filename = "../testimages/points4.jpg";
+        //filename = "../testimages/lettera.jpg";
+        //filename = "../testimages/abv.jpg";
+    }
+    else
+    {
+        filename = argv[1];
+    }
+
     Mat originalImage = imread(filename);
     Mat originalImage2 = imread(filename);
 
